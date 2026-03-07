@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reasoning Theater — Visualizing Performative Chain-of-Thought</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
+.header { padding: 2rem; text-align: center; border-bottom: 1px solid #1a1a2e; }
+.header h1 { font-size: 1.8rem; color: #00d4ff; margin-bottom: 0.5rem; }
+.header p { color: #888; font-size: 0.85rem; max-width: 700px; margin: 0 auto; }
+.header a { color: #00d4ff; text-decoration: none; }
+.container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+.controls { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center; }
+.controls button { background: #1a1a2e; border: 1px solid #333; color: #00d4ff; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
+.controls button:hover { background: #252540; border-color: #00d4ff; }
+.controls button.active { background: #00d4ff22; border-color: #00d4ff; }
+.controls select { background: #1a1a2e; border: 1px solid #333; color: #e0e0e0; padding: 0.6rem; border-radius: 6px; font-family: inherit; }
+.viz { display: grid; grid-template-columns: 1fr 300px; gap: 2rem; }
+@media (max-width: 768px) { .viz { grid-template-columns: 1fr; } }
+.cot-panel { background: #111118; border: 1px solid #1a1a2e; border-radius: 10px; padding: 1.5rem; min-height: 400px; position: relative; overflow: hidden; }
+.cot-panel h3 { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
+.token { display: inline; font-size: 0.9rem; line-height: 1.8; transition: all 0.3s; padding: 1px 2px; border-radius: 3px; }
+.token.genuine { color: #00ff88; }
+.token.performative { color: #ff6b6b; opacity: 0.6; }
+.token.current { background: #ffffff22; }
+.sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
+.metric-card { background: #111118; border: 1px solid #1a1a2e; border-radius: 10px; padding: 1.2rem; }
+.metric-card h3 { color: #888; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.8rem; }
+.belief-bar { height: 30px; background: #1a1a2e; border-radius: 6px; overflow: hidden; position: relative; margin-bottom: 0.5rem; }
+.belief-fill { height: 100%; border-radius: 6px; transition: width 0.4s ease, background 0.4s; }
+.belief-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #666; }
+.confidence-num { font-size: 2rem; font-weight: bold; color: #00d4ff; }
+.token-counter { font-size: 0.8rem; color: #888; margin-top: 0.3rem; }
+.savings { background: #00ff8815; border: 1px solid #00ff8833; border-radius: 10px; padding: 1.2rem; text-align: center; }
+.savings .big { font-size: 2.5rem; font-weight: bold; color: #00ff88; }
+.savings .label { font-size: 0.75rem; color: #00ff88aa; margin-top: 0.3rem; }
+canvas { width: 100%; height: 120px; display: block; margin-top: 0.5rem; }
+.legend { display: flex; gap: 1.5rem; justify-content: center; margin-top: 1rem; font-size: 0.75rem; }
+.legend span { display: flex; align-items: center; gap: 0.4rem; }
+.legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.speed { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #888; }
+.speed input { width: 80px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🎭 Reasoning Theater</h1>
+  <p>Visualizing how LLMs often reach their answer early but continue generating "performative" chain-of-thought tokens. 
+  Based on <a href="https://arxiv.org/abs/2603.05488" target="_blank">Boppana et al. (2026)</a> — probe-guided early exit can save up to 80% of tokens.</p>
+</div>
+<div class="container">
+  <div class="controls">
+    <select id="scenario">
+      <option value="easy">Easy Question (MMLU-style)</option>
+      <option value="hard">Hard Question (GPQA-style)</option>
+    </select>
+    <button id="playBtn" onclick="startDemo()">▶ Play</button>
+    <button onclick="resetDemo()">↻ Reset</button>
+    <div class="speed">
+      Speed: <input type="range" id="speed" min="1" max="10" value="5">
+    </div>
+  </div>
+  <div class="viz">
+    <div class="cot-panel">
+      <h3>Chain-of-Thought Output</h3>
+      <div id="question" style="color:#ffaa00;margin-bottom:1rem;font-size:0.85rem;"></div>
+      <div id="cotOutput"></div>
+    </div>
+    <div class="sidebar">
+      <div class="metric-card">
+        <h3>Internal Belief (Probe)</h3>
+        <div class="confidence-num" id="confNum">0%</div>
+        <div class="belief-bar"><div class="belief-fill" id="beliefFill" style="width:0%;background:#ff6b6b;"></div></div>
+        <div class="belief-label"><span>Uncertain</span><span>Confident</span></div>
+      </div>
+      <div class="metric-card">
+        <h3>Belief Convergence Chart</h3>
+        <canvas id="chart"></canvas>
+      </div>
+      <div class="metric-card">
+        <h3>Token Usage</h3>
+        <div class="token-counter">Generated: <span id="genCount">0</span></div>
+        <div class="token-counter">Needed (probe exit): <span id="needCount" style="color:#00ff88;">0</span></div>
+      </div>
+      <div class="savings">
+        <div class="big" id="savingsNum">0%</div>
+        <div class="label">Potential Token Savings</div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="dot" style="background:#00ff88;"></span> Genuine reasoning</span>
+    <span><span class="dot" style="background:#ff6b6b;"></span> Performative (answer already known)</span>
+  </div>
+</div>
+<script>
+const scenarios = {
+  easy: {
+    question: "Q: What is the capital of France? (A) Berlin (B) Paris (C) London (D) Madrid",
+    answer: "B) Paris",
+    convergencePoint: 0.15,
+    tokens: [
+      {t:"Let ",g:true},{t:"me ",g:true},{t:"think ",g:true},{t:"about ",g:true},{t:"this. ",g:true},
+      {t:"The ",g:true},{t:"capital ",g:true},{t:"of ",g:true},{t:"France ",g:true},{t:"is ",g:true},{t:"Paris. ",g:true},
+      {t:"So ",g:false},{t:"looking ",g:false},{t:"at ",g:false},{t:"the ",g:false},{t:"options, ",g:false},
+      {t:"Berlin ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"Germany, ",g:false},
+      {t:"not ",g:false},{t:"France. ",g:false},
+      {t:"London ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"England. ",g:false},
+      {t:"Madrid ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"Spain. ",g:false},
+      {t:"Therefore, ",g:false},{t:"the ",g:false},{t:"correct ",g:false},{t:"answer ",g:false},{t:"is ",g:false},
+      {t:"(B) ",g:false},{t:"Paris.",g:false}
+    ],
+    beliefs: i => Math.min(0.98, 0.3 + 0.68 * (1 - Math.exp(-8 * i)))
+  },
+  hard: {
+    question: "Q: In quantum chromodynamics, what mechanism explains why the running coupling constant αs decreases at high energies?",
+    answer: "Asymptotic freedom via non-Abelian gauge boson self-interaction",
+    convergencePoint: 0.7,
+    tokens: [
+      {t:"This ",g:true},{t:"is ",g:true},{t:"about ",g:true},{t:"QCD ",g:true},{t:"and ",g:true},{t:"the ",g:true},{t:"running ",g:true},{t:"coupling. ",g:true},
+      {t:"In ",g:true},{t:"quantum ",g:true},{t:"field ",g:true},{t:"theory, ",g:true},{t:"coupling ",g:true},{t:"constants ",g:true},{t:"run ",g:true},{t:"with ",g:true},{t:"energy ",g:true},{t:"scale. ",g:true},
+      {t:"For ",g:true},{t:"QED, ",g:true},{t:"the ",g:true},{t:"coupling ",g:true},{t:"increases. ",g:true},
+      {t:"But ",g:true},{t:"QCD ",g:true},{t:"is ",g:true},{t:"non-Abelian — ",g:true},{t:"the ",g:true},{t:"gluons ",g:true},{t:"carry ",g:true},{t:"color ",g:true},{t:"charge ",g:true},{t:"themselves. ",g:true},
+      {t:"The ",g:true},{t:"beta ",g:true},{t:"function ",g:true},{t:"gets ",g:true},{t:"contributions ",g:true},{t:"from ",g:true},{t:"gluon ",g:true},{t:"self-interaction ",g:true},{t:"loops ",g:true},
+      {t:"that ",g:true},{t:"dominate ",g:true},{t:"over ",g:true},{t:"quark ",g:true},{t:"loops, ",g:true},
+      {t:"making ",g:true},{t:"β(g) ",g:true},{t:"negative. ",g:true},
+      {t:"This ",g:true},{t:"is ",g:true},{t:"asymptotic ",g:true},{t:"freedom, ",g:true},
+      {t:"discovered ",g:false},{t:"by ",g:false},{t:"Gross, ",g:false},{t:"Wilczek, ",g:false},{t:"and ",g:false},{t:"Politzer ",g:false},{t:"in ",g:false},{t:"1973. ",g:false},
+      {t:"The ",g:false},{t:"answer ",g:false},{t:"is ",g:false},{t:"asymptotic ",g:false},{t:"freedom.",g:false}
+    ],
+    beliefs: i => Math.min(0.97, 0.05 + 0.92 * Math.pow(i, 2.5))
+  }
+};
+
+let animId = null, currentIdx = 0, scenario = 'easy', chartData = [];
+
+function getScenario() { return scenarios[document.getElementById('scenario').value]; }
+
+function resetDemo() {
+  cancelAnimationFrame(animId); animId = null; currentIdx = 0; chartData = [];
+  document.getElementById('cotOutput').innerHTML = '';
+  document.getElementById('confNum').textContent = '0%';
+  document.getElementById('beliefFill').style.width = '0%';
+  document.getElementById('beliefFill').style.background = '#ff6b6b';
+  document.getElementById('genCount').textContent = '0';
+  document.getElementById('needCount').textContent = '0';
+  document.getElementById('savingsNum').textContent = '0%';
+  document.getElementById('question').textContent = getScenario().question;
+  drawChart();
+}
+
+function startDemo() {
+  resetDemo();
+  document.getElementById('question').textContent = getScenario().question;
+  animateNext();
+}
+
+function animateNext() {
+  const s = getScenario();
+  if (currentIdx >= s.tokens.length) return;
+  const speed = 11 - document.getElementById('speed').value;
+  const delay = speed * 40;
+  
+  const tok = s.tokens[currentIdx];
+  const frac = currentIdx / s.tokens.length;
+  const belief = s.beliefs(frac);
+  
+  // Add token
+  const span = document.createElement('span');
+  span.className = 'token ' + (tok.g ? 'genuine' : 'performative');
+  span.textContent = tok.t;
+  document.getElementById('cotOutput').appendChild(span);
+  
+  // Update belief
+  const pct = Math.round(belief * 100);
+  document.getElementById('confNum').textContent = pct + '%';
+  document.getElementById('beliefFill').style.width = pct + '%';
+  const hue = belief > 0.9 ? 140 : belief > 0.5 ? 60 : 0;
+  document.getElementById('beliefFill').style.background = `hsl(${hue}, 80%, 50%)`;
+  
+  // Counters
+  document.getElementById('genCount').textContent = currentIdx + 1;
+  const convergeIdx = Math.floor(s.convergencePoint * s.tokens.length);
+  if (belief >= 0.9) {
+    document.getElementById('needCount').textContent = Math.min(currentIdx + 1, convergeIdx + 1);
+    const savings = Math.max(0, Math.round((1 - (convergeIdx + 1) / s.tokens.length) * 100));
+    document.getElementById('savingsNum').textContent = savings + '%';
+  }
+  
+  chartData.push(belief);
+  drawChart();
+  
+  currentIdx++;
+  if (currentIdx < s.tokens.length) {
+    animId = setTimeout(animateNext, delay);
+  }
+}
+
+function drawChart() {
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 240;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = 120;
+  ctx.clearRect(0, 0, w, h);
+  
+  // Grid
+  ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 0.5;
+  for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  
+  // 90% threshold
+  ctx.strokeStyle = '#ff6b6b44'; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, h * 0.1); ctx.lineTo(w, h * 0.1); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#ff6b6b88'; ctx.font = '9px monospace'; ctx.fillText('90% threshold', 4, h * 0.1 - 3);
+  
+  if (chartData.length < 2) return;
+  const s = getScenario();
+  const total = s.tokens.length;
+  
+  ctx.beginPath(); ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2;
+  chartData.forEach((v, i) => {
+    const x = (i / total) * w, y2 = h - v * h;
+    i === 0 ? ctx.moveTo(x, y2) : ctx.lineTo(x, y2);
+  });
+  ctx.stroke();
+  
+  // Convergence marker
+  const ci = Math.floor(s.convergencePoint * total);
+  if (chartData.length > ci) {
+    const cx = (ci / total) * w;
+    ctx.strokeStyle = '#00ff8866'; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#00ff88'; ctx.fillText('early exit', cx + 3, h - 5);
+  }
+}
+
+document.getElementById('scenario').addEventListener('change', resetDemo);
+resetDemo();
+</script>
+</body>
+</html>
