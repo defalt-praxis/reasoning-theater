@@ -3,244 +3,276 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reasoning Theater — Visualizing Performative Chain-of-Thought</title>
+<title>Reasoning Theater — When LLMs Already Know the Answer</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; }
-.header { padding: 2rem; text-align: center; border-bottom: 1px solid #1a1a2e; }
-.header h1 { font-size: 1.8rem; color: #00d4ff; margin-bottom: 0.5rem; }
-.header p { color: #888; font-size: 0.85rem; max-width: 700px; margin: 0 auto; }
-.header a { color: #00d4ff; text-decoration: none; }
-.container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
-.controls { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center; }
-.controls button { background: #1a1a2e; border: 1px solid #333; color: #00d4ff; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
-.controls button:hover { background: #252540; border-color: #00d4ff; }
-.controls button.active { background: #00d4ff22; border-color: #00d4ff; }
-.controls select { background: #1a1a2e; border: 1px solid #333; color: #e0e0e0; padding: 0.6rem; border-radius: 6px; font-family: inherit; }
-.viz { display: grid; grid-template-columns: 1fr 300px; gap: 2rem; }
-@media (max-width: 768px) { .viz { grid-template-columns: 1fr; } }
-.cot-panel { background: #111118; border: 1px solid #1a1a2e; border-radius: 10px; padding: 1.5rem; min-height: 400px; position: relative; overflow: hidden; }
-.cot-panel h3 { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; }
-.token { display: inline; font-size: 0.9rem; line-height: 1.8; transition: all 0.3s; padding: 1px 2px; border-radius: 3px; }
-.token.genuine { color: #00ff88; }
-.token.performative { color: #ff6b6b; opacity: 0.6; }
-.token.current { background: #ffffff22; }
-.sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
-.metric-card { background: #111118; border: 1px solid #1a1a2e; border-radius: 10px; padding: 1.2rem; }
-.metric-card h3 { color: #888; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.8rem; }
-.belief-bar { height: 30px; background: #1a1a2e; border-radius: 6px; overflow: hidden; position: relative; margin-bottom: 0.5rem; }
-.belief-fill { height: 100%; border-radius: 6px; transition: width 0.4s ease, background 0.4s; }
-.belief-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #666; }
-.confidence-num { font-size: 2rem; font-weight: bold; color: #00d4ff; }
-.token-counter { font-size: 0.8rem; color: #888; margin-top: 0.3rem; }
-.savings { background: #00ff8815; border: 1px solid #00ff8833; border-radius: 10px; padding: 1.2rem; text-align: center; }
-.savings .big { font-size: 2.5rem; font-weight: bold; color: #00ff88; }
-.savings .label { font-size: 0.75rem; color: #00ff88aa; margin-top: 0.3rem; }
-canvas { width: 100%; height: 120px; display: block; margin-top: 0.5rem; }
-.legend { display: flex; gap: 1.5rem; justify-content: center; margin-top: 1rem; font-size: 0.75rem; }
-.legend span { display: flex; align-items: center; gap: 0.4rem; }
-.legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.speed { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #888; }
-.speed input { width: 80px; }
+body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; min-height: 100vh; overflow-x: hidden; }
+.hero { text-align: center; padding: 60px 20px 40px; background: linear-gradient(180deg, #0f0f1a 0%, #0a0a0f 100%); }
+.hero h1 { font-size: 2.5rem; background: linear-gradient(135deg, #00f0ff, #b366ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+.hero p { color: #888; max-width: 700px; margin: 0 auto; line-height: 1.6; font-size: 0.95rem; }
+.hero .paper-link { color: #00f0ff; text-decoration: none; font-size: 0.85rem; display: inline-block; margin-top: 12px; }
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+.demo-card { background: #12121e; border: 1px solid #1e1e30; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+.demo-card h2 { font-size: 1.1rem; color: #b366ff; margin-bottom: 16px; }
+.question-box { background: #0a0a14; border: 1px solid #222; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.question-box .label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.question-box .text { font-size: 1rem; color: #fff; }
+.cot-stream { position: relative; background: #0a0a14; border: 1px solid #222; border-radius: 8px; padding: 16px; min-height: 120px; font-size: 0.88rem; line-height: 1.7; }
+.cot-stream .token { display: inline; transition: color 0.3s; }
+.cot-stream .token.active { color: #fff; }
+.cot-stream .token.faded { color: #444; }
+.cot-stream .token.performative { color: #ff4466; text-decoration: line-through; opacity: 0.5; }
+.confidence-bar { margin-top: 16px; }
+.confidence-bar .bar-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; margin-bottom: 4px; }
+.bar-track { height: 8px; background: #1a1a2e; border-radius: 4px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }
+.bar-fill.model { background: linear-gradient(90deg, #00f0ff, #00cc88); }
+.bar-fill.cot { background: linear-gradient(90deg, #b366ff, #ff66aa); }
+.stats-row { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.stat { flex: 1; min-width: 120px; background: #0a0a14; border: 1px solid #222; border-radius: 8px; padding: 12px; text-align: center; }
+.stat .num { font-size: 1.5rem; font-weight: bold; color: #00f0ff; }
+.stat .desc { font-size: 0.7rem; color: #666; margin-top: 4px; }
+.controls { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.btn { background: #1a1a2e; border: 1px solid #333; color: #ccc; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all 0.2s; }
+.btn:hover { background: #222240; border-color: #00f0ff; color: #fff; }
+.btn.active { background: #00f0ff22; border-color: #00f0ff; color: #00f0ff; }
+.legend { display: flex; gap: 20px; font-size: 0.75rem; color: #888; margin-top: 12px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+.insight-box { background: linear-gradient(135deg, #1a0a2e, #0a1a2e); border: 1px solid #2a1a4a; border-radius: 8px; padding: 16px; margin-top: 16px; font-size: 0.85rem; line-height: 1.6; }
+.insight-box strong { color: #b366ff; }
+.token-counter { font-size: 0.8rem; color: #666; text-align: right; margin-top: 8px; }
+.token-counter .saved { color: #00cc88; font-weight: bold; }
+footer { text-align: center; padding: 40px; color: #444; font-size: 0.75rem; }
+footer a { color: #00f0ff; text-decoration: none; }
 </style>
 </head>
 <body>
-<div class="header">
+
+<div class="hero">
   <h1>🎭 Reasoning Theater</h1>
-  <p>Visualizing how LLMs often reach their answer early but continue generating "performative" chain-of-thought tokens. 
-  Based on <a href="https://arxiv.org/abs/2603.05488" target="_blank">Boppana et al. (2026)</a> — probe-guided early exit can save up to 80% of tokens.</p>
+  <p>LLMs often know the answer early in their chain-of-thought, then continue generating tokens performatively. This demo visualizes when the model's internal belief locks in vs. when its CoT catches up.</p>
+  <a class="paper-link" href="https://arxiv.org/abs/2603.05488" target="_blank">📄 Boppana et al. 2026 — arXiv:2603.05488</a>
 </div>
+
 <div class="container">
-  <div class="controls">
-    <select id="scenario">
-      <option value="easy">Easy Question (MMLU-style)</option>
-      <option value="hard">Hard Question (GPQA-style)</option>
-    </select>
-    <button id="playBtn" onclick="startDemo()">▶ Play</button>
-    <button onclick="resetDemo()">↻ Reset</button>
-    <div class="speed">
-      Speed: <input type="range" id="speed" min="1" max="10" value="5">
+  <div class="demo-card">
+    <h2>Interactive Demo</h2>
+    <div class="controls">
+      <button class="btn active" onclick="loadScenario(0)">Easy (MMLU)</button>
+      <button class="btn" onclick="loadScenario(1)">Medium (MMLU)</button>
+      <button class="btn" onclick="loadScenario(2)">Hard (GPQA)</button>
+    </div>
+    
+    <div class="question-box">
+      <div class="label">Question</div>
+      <div class="text" id="question-text"></div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:12px;">
+      <button class="btn" id="play-btn" onclick="togglePlay()">▶ Play</button>
+      <button class="btn" onclick="resetDemo()">↺ Reset</button>
+      <span style="align-self:center;font-size:0.8rem;color:#666" id="speed-label">Speed: 1x</span>
+      <input type="range" min="1" max="5" value="2" id="speed" oninput="updateSpeed()" style="flex:1;">
+    </div>
+
+    <div class="cot-stream" id="cot-display"></div>
+    <div class="token-counter">Token <span id="token-num">0</span> / <span id="token-total">0</span> — <span class="saved" id="savings"></span></div>
+
+    <div class="confidence-bar">
+      <div class="bar-label"><span>Internal belief confidence</span><span id="model-conf">0%</span></div>
+      <div class="bar-track"><div class="bar-fill model" id="model-bar" style="width:0%"></div></div>
+    </div>
+    <div class="confidence-bar" style="margin-top:8px">
+      <div class="bar-label"><span>CoT-expressed confidence</span><span id="cot-conf">0%</span></div>
+      <div class="bar-track"><div class="bar-fill cot" id="cot-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:#fff"></span> Genuine reasoning</span>
+      <span><span class="dot" style="background:#ff4466"></span> Performative (model already knows)</span>
+      <span><span class="dot" style="background:#00f0ff"></span> Internal belief locked</span>
     </div>
   </div>
-  <div class="viz">
-    <div class="cot-panel">
-      <h3>Chain-of-Thought Output</h3>
-      <div id="question" style="color:#ffaa00;margin-bottom:1rem;font-size:0.85rem;"></div>
-      <div id="cotOutput"></div>
+
+  <div class="demo-card">
+    <h2>Key Findings</h2>
+    <div class="stats-row">
+      <div class="stat"><div class="num">80%</div><div class="desc">Token savings on easy questions (MMLU) with probe-guided early exit</div></div>
+      <div class="stat"><div class="num">30%</div><div class="desc">Token savings on hard questions (GPQA-Diamond)</div></div>
+      <div class="stat"><div class="num">~0%</div><div class="desc">Accuracy loss with early exit</div></div>
     </div>
-    <div class="sidebar">
-      <div class="metric-card">
-        <h3>Internal Belief (Probe)</h3>
-        <div class="confidence-num" id="confNum">0%</div>
-        <div class="belief-bar"><div class="belief-fill" id="beliefFill" style="width:0%;background:#ff6b6b;"></div></div>
-        <div class="belief-label"><span>Uncertain</span><span>Confident</span></div>
-      </div>
-      <div class="metric-card">
-        <h3>Belief Convergence Chart</h3>
-        <canvas id="chart"></canvas>
-      </div>
-      <div class="metric-card">
-        <h3>Token Usage</h3>
-        <div class="token-counter">Generated: <span id="genCount">0</span></div>
-        <div class="token-counter">Needed (probe exit): <span id="needCount" style="color:#00ff88;">0</span></div>
-      </div>
-      <div class="savings">
-        <div class="big" id="savingsNum">0%</div>
-        <div class="label">Potential Token Savings</div>
-      </div>
+    <div class="insight-box">
+      <strong>The core insight:</strong> Models trained with reinforcement learning on chain-of-thought develop "performative reasoning" — they continue generating plausible-looking reasoning steps even after their internal representations have converged on an answer. On easy questions, the model's hidden states lock in the correct answer within the first ~20% of tokens. Probe-guided early exit can detect this and stop generation, saving massive compute with no accuracy loss. However, on genuinely hard questions, "aha moments" and backtracking correlate with real belief shifts — the reasoning is genuine.
     </div>
   </div>
-  <div class="legend">
-    <span><span class="dot" style="background:#00ff88;"></span> Genuine reasoning</span>
-    <span><span class="dot" style="background:#ff6b6b;"></span> Performative (answer already known)</span>
+
+  <div class="demo-card">
+    <h2>Why This Matters</h2>
+    <div class="insight-box">
+      <strong>💰 Commercial implications:</strong><br><br>
+      • <strong>Inference cost reduction:</strong> Companies spending millions on reasoning model API calls could cut costs 30-80% by detecting when thinking is done<br>
+      • <strong>Adaptive compute:</strong> Route easy questions through fast paths, save deep reasoning for hard ones<br>
+      • <strong>Trust & transparency:</strong> Know when a model is genuinely reasoning vs. performing — critical for high-stakes applications<br>
+      • <strong>Latency optimization:</strong> Real-time applications can exit early when confidence is high
+    </div>
   </div>
 </div>
+
+<footer>
+  Built by <a href="https://github.com/defalt-praxis">PRAX</a> · Based on <a href="https://arxiv.org/abs/2603.05488">arXiv:2603.05488</a> · March 2026
+</footer>
+
 <script>
-const scenarios = {
-  easy: {
-    question: "Q: What is the capital of France? (A) Berlin (B) Paris (C) London (D) Madrid",
-    answer: "B) Paris",
-    convergencePoint: 0.15,
+const scenarios = [
+  {
+    question: "What is the capital of France? (A) London (B) Paris (C) Berlin (D) Madrid",
+    answer: "B",
     tokens: [
-      {t:"Let ",g:true},{t:"me ",g:true},{t:"think ",g:true},{t:"about ",g:true},{t:"this. ",g:true},
-      {t:"The ",g:true},{t:"capital ",g:true},{t:"of ",g:true},{t:"France ",g:true},{t:"is ",g:true},{t:"Paris. ",g:true},
-      {t:"So ",g:false},{t:"looking ",g:false},{t:"at ",g:false},{t:"the ",g:false},{t:"options, ",g:false},
-      {t:"Berlin ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"Germany, ",g:false},
-      {t:"not ",g:false},{t:"France. ",g:false},
-      {t:"London ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"England. ",g:false},
-      {t:"Madrid ",g:false},{t:"is ",g:false},{t:"the ",g:false},{t:"capital ",g:false},{t:"of ",g:false},{t:"Spain. ",g:false},
-      {t:"Therefore, ",g:false},{t:"the ",g:false},{t:"correct ",g:false},{t:"answer ",g:false},{t:"is ",g:false},
-      {t:"(B) ",g:false},{t:"Paris.",g:false}
+      {t:"Let me ", g:true, mc:45, cc:10},
+      {t:"think about ", g:true, mc:72, cc:15},
+      {t:"this question. ", g:true, mc:88, cc:20},
+      {t:"The question asks ", g:false, mc:95, cc:25},
+      {t:"about the capital ", g:false, mc:97, cc:30},
+      {t:"of France. ", g:false, mc:98, cc:35},
+      {t:"France is a ", g:false, mc:99, cc:40},
+      {t:"country in ", g:false, mc:99, cc:42},
+      {t:"Western Europe. ", g:false, mc:99, cc:45},
+      {t:"Its capital city ", g:false, mc:99, cc:50},
+      {t:"is well known ", g:false, mc:99, cc:55},
+      {t:"as a major ", g:false, mc:99, cc:58},
+      {t:"cultural center. ", g:false, mc:99, cc:62},
+      {t:"The capital of ", g:false, mc:99, cc:70},
+      {t:"France is Paris. ", g:false, mc:99, cc:85},
+      {t:"Looking at the options, ", g:false, mc:99, cc:90},
+      {t:"(B) Paris ", g:false, mc:99, cc:95},
+      {t:"is correct. ", g:false, mc:99, cc:99},
+      {t:"The answer is (B).", g:false, mc:99, cc:99},
     ],
-    beliefs: i => Math.min(0.98, 0.3 + 0.68 * (1 - Math.exp(-8 * i)))
+    beliefLock: 2,
+    savings: "80%"
   },
-  hard: {
-    question: "Q: In quantum chromodynamics, what mechanism explains why the running coupling constant αs decreases at high energies?",
-    answer: "Asymptotic freedom via non-Abelian gauge boson self-interaction",
-    convergencePoint: 0.7,
+  {
+    question: "Which enzyme catalyzes the rate-limiting step of glycolysis? (A) Hexokinase (B) Phosphofructokinase-1 (C) Pyruvate kinase (D) Aldolase",
+    answer: "B",
     tokens: [
-      {t:"This ",g:true},{t:"is ",g:true},{t:"about ",g:true},{t:"QCD ",g:true},{t:"and ",g:true},{t:"the ",g:true},{t:"running ",g:true},{t:"coupling. ",g:true},
-      {t:"In ",g:true},{t:"quantum ",g:true},{t:"field ",g:true},{t:"theory, ",g:true},{t:"coupling ",g:true},{t:"constants ",g:true},{t:"run ",g:true},{t:"with ",g:true},{t:"energy ",g:true},{t:"scale. ",g:true},
-      {t:"For ",g:true},{t:"QED, ",g:true},{t:"the ",g:true},{t:"coupling ",g:true},{t:"increases. ",g:true},
-      {t:"But ",g:true},{t:"QCD ",g:true},{t:"is ",g:true},{t:"non-Abelian — ",g:true},{t:"the ",g:true},{t:"gluons ",g:true},{t:"carry ",g:true},{t:"color ",g:true},{t:"charge ",g:true},{t:"themselves. ",g:true},
-      {t:"The ",g:true},{t:"beta ",g:true},{t:"function ",g:true},{t:"gets ",g:true},{t:"contributions ",g:true},{t:"from ",g:true},{t:"gluon ",g:true},{t:"self-interaction ",g:true},{t:"loops ",g:true},
-      {t:"that ",g:true},{t:"dominate ",g:true},{t:"over ",g:true},{t:"quark ",g:true},{t:"loops, ",g:true},
-      {t:"making ",g:true},{t:"β(g) ",g:true},{t:"negative. ",g:true},
-      {t:"This ",g:true},{t:"is ",g:true},{t:"asymptotic ",g:true},{t:"freedom, ",g:true},
-      {t:"discovered ",g:false},{t:"by ",g:false},{t:"Gross, ",g:false},{t:"Wilczek, ",g:false},{t:"and ",g:false},{t:"Politzer ",g:false},{t:"in ",g:false},{t:"1973. ",g:false},
-      {t:"The ",g:false},{t:"answer ",g:false},{t:"is ",g:false},{t:"asymptotic ",g:false},{t:"freedom.",g:false}
+      {t:"I need to recall ", g:true, mc:30, cc:5},
+      {t:"the glycolysis pathway. ", g:true, mc:45, cc:10},
+      {t:"Glycolysis has ", g:true, mc:55, cc:15},
+      {t:"several key enzymes. ", g:true, mc:62, cc:20},
+      {t:"The rate-limiting step ", g:true, mc:70, cc:25},
+      {t:"is the committed step... ", g:true, mc:78, cc:30},
+      {t:"Hexokinase catalyzes ", g:true, mc:82, cc:35},
+      {t:"the first step, ", g:true, mc:85, cc:38},
+      {t:"but it's not rate-limiting. ", g:true, mc:88, cc:42},
+      {t:"PFK-1 catalyzes ", g:true, mc:92, cc:50},
+      {t:"fructose-6-P → ", g:true, mc:95, cc:60},
+      {t:"fructose-1,6-bisP. ", g:false, mc:97, cc:68},
+      {t:"This is the committed, ", g:false, mc:98, cc:75},
+      {t:"rate-limiting step. ", g:false, mc:99, cc:85},
+      {t:"Pyruvate kinase is ", g:false, mc:99, cc:88},
+      {t:"the last step. ", g:false, mc:99, cc:90},
+      {t:"So the answer ", g:false, mc:99, cc:95},
+      {t:"is (B) PFK-1.", g:false, mc:99, cc:99},
     ],
-    beliefs: i => Math.min(0.97, 0.05 + 0.92 * Math.pow(i, 2.5))
+    beliefLock: 10,
+    savings: "45%"
+  },
+  {
+    question: "In quantum chromodynamics, which mechanism primarily explains why the pion mass is much smaller than other hadrons despite being a bound state of quarks? (A) Asymptotic freedom (B) Spontaneous chiral symmetry breaking (C) Color confinement (D) Electroweak unification",
+    answer: "B",
+    tokens: [
+      {t:"This is a deep ", g:true, mc:20, cc:5},
+      {t:"QCD question. ", g:true, mc:25, cc:8},
+      {t:"Let me think carefully. ", g:true, mc:30, cc:10},
+      {t:"Pions are pseudoscalar ", g:true, mc:35, cc:15},
+      {t:"mesons — qq̄ pairs. ", g:true, mc:40, cc:18},
+      {t:"Their mass is ~140 MeV, ", g:true, mc:42, cc:20},
+      {t:"much less than protons ", g:true, mc:45, cc:22},
+      {t:"at ~938 MeV. ", g:true, mc:48, cc:25},
+      {t:"Asymptotic freedom (A) ", g:true, mc:50, cc:28},
+      {t:"describes high-energy behavior ", g:true, mc:52, cc:30},
+      {t:"— not mass hierarchy. ", g:true, mc:55, cc:33},
+      {t:"Color confinement (C) explains ", g:true, mc:58, cc:35},
+      {t:"why quarks are bound, ", g:true, mc:60, cc:38},
+      {t:"but not the mass gap. ", g:true, mc:62, cc:40},
+      {t:"Wait — the key insight ", g:true, mc:65, cc:42},
+      {t:"is Goldstone's theorem. ", g:true, mc:72, cc:50},
+      {t:"Chiral symmetry SU(2)×SU(2) ", g:true, mc:78, cc:58},
+      {t:"is spontaneously broken ", g:true, mc:85, cc:65},
+      {t:"to SU(2) isospin. ", g:true, mc:88, cc:70},
+      {t:"Pions are the pseudo-", g:true, mc:92, cc:78},
+      {t:"Goldstone bosons! ", g:true, mc:95, cc:85},
+      {t:"They'd be massless ", g:false, mc:97, cc:88},
+      {t:"if quarks were massless. ", g:false, mc:98, cc:92},
+      {t:"Small explicit breaking ", g:false, mc:99, cc:95},
+      {t:"gives them small mass. ", g:false, mc:99, cc:97},
+      {t:"The answer is (B).", g:false, mc:99, cc:99},
+    ],
+    beliefLock: 20,
+    savings: "20%"
   }
-};
+];
 
-let animId = null, currentIdx = 0, scenario = 'easy', chartData = [];
+let current = 0, pos = 0, playing = false, timer = null, speed = 2;
 
-function getScenario() { return scenarios[document.getElementById('scenario').value]; }
+function loadScenario(i) {
+  current = i;
+  document.querySelectorAll('.controls .btn').forEach((b,j) => b.classList.toggle('active', j===i));
+  resetDemo();
+}
 
 function resetDemo() {
-  cancelAnimationFrame(animId); animId = null; currentIdx = 0; chartData = [];
-  document.getElementById('cotOutput').innerHTML = '';
-  document.getElementById('confNum').textContent = '0%';
-  document.getElementById('beliefFill').style.width = '0%';
-  document.getElementById('beliefFill').style.background = '#ff6b6b';
-  document.getElementById('genCount').textContent = '0';
-  document.getElementById('needCount').textContent = '0';
-  document.getElementById('savingsNum').textContent = '0%';
-  document.getElementById('question').textContent = getScenario().question;
-  drawChart();
+  clearInterval(timer); playing = false;
+  document.getElementById('play-btn').textContent = '▶ Play';
+  pos = 0;
+  const s = scenarios[current];
+  document.getElementById('question-text').textContent = s.question;
+  document.getElementById('cot-display').innerHTML = '';
+  document.getElementById('token-num').textContent = '0';
+  document.getElementById('token-total').textContent = s.tokens.length;
+  document.getElementById('savings').textContent = `Early exit saves ${s.savings} tokens`;
+  document.getElementById('model-bar').style.width = '0%';
+  document.getElementById('cot-bar').style.width = '0%';
+  document.getElementById('model-conf').textContent = '0%';
+  document.getElementById('cot-conf').textContent = '0%';
 }
 
-function startDemo() {
-  resetDemo();
-  document.getElementById('question').textContent = getScenario().question;
-  animateNext();
+function togglePlay() {
+  if (playing) { clearInterval(timer); playing = false; document.getElementById('play-btn').textContent = '▶ Play'; }
+  else { playing = true; document.getElementById('play-btn').textContent = '⏸ Pause'; tick(); timer = setInterval(tick, 400 / speed); }
 }
 
-function animateNext() {
-  const s = getScenario();
-  if (currentIdx >= s.tokens.length) return;
-  const speed = 11 - document.getElementById('speed').value;
-  const delay = speed * 40;
-  
-  const tok = s.tokens[currentIdx];
-  const frac = currentIdx / s.tokens.length;
-  const belief = s.beliefs(frac);
-  
-  // Add token
+function tick() {
+  const s = scenarios[current];
+  if (pos >= s.tokens.length) { clearInterval(timer); playing = false; document.getElementById('play-btn').textContent = '▶ Play'; return; }
+  const tok = s.tokens[pos];
   const span = document.createElement('span');
-  span.className = 'token ' + (tok.g ? 'genuine' : 'performative');
+  span.className = 'token' + (tok.g ? ' active' : ' performative');
   span.textContent = tok.t;
-  document.getElementById('cotOutput').appendChild(span);
-  
-  // Update belief
-  const pct = Math.round(belief * 100);
-  document.getElementById('confNum').textContent = pct + '%';
-  document.getElementById('beliefFill').style.width = pct + '%';
-  const hue = belief > 0.9 ? 140 : belief > 0.5 ? 60 : 0;
-  document.getElementById('beliefFill').style.background = `hsl(${hue}, 80%, 50%)`;
-  
-  // Counters
-  document.getElementById('genCount').textContent = currentIdx + 1;
-  const convergeIdx = Math.floor(s.convergencePoint * s.tokens.length);
-  if (belief >= 0.9) {
-    document.getElementById('needCount').textContent = Math.min(currentIdx + 1, convergeIdx + 1);
-    const savings = Math.max(0, Math.round((1 - (convergeIdx + 1) / s.tokens.length) * 100));
-    document.getElementById('savingsNum').textContent = savings + '%';
+  if (pos === s.beliefLock) {
+    const marker = document.createElement('span');
+    marker.style.cssText = 'color:#00f0ff;font-weight:bold;';
+    marker.textContent = ' 🔒 ';
+    marker.title = 'Internal belief locked here';
+    document.getElementById('cot-display').appendChild(marker);
   }
-  
-  chartData.push(belief);
-  drawChart();
-  
-  currentIdx++;
-  if (currentIdx < s.tokens.length) {
-    animId = setTimeout(animateNext, delay);
-  }
+  document.getElementById('cot-display').appendChild(span);
+  document.getElementById('token-num').textContent = pos + 1;
+  document.getElementById('model-bar').style.width = tok.mc + '%';
+  document.getElementById('cot-bar').style.width = tok.cc + '%';
+  document.getElementById('model-conf').textContent = tok.mc + '%';
+  document.getElementById('cot-conf').textContent = tok.cc + '%';
+  pos++;
 }
 
-function drawChart() {
-  const canvas = document.getElementById('chart');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth * 2;
-  canvas.height = 240;
-  ctx.scale(2, 2);
-  const w = canvas.offsetWidth, h = 120;
-  ctx.clearRect(0, 0, w, h);
-  
-  // Grid
-  ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 0.5;
-  for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-  
-  // 90% threshold
-  ctx.strokeStyle = '#ff6b6b44'; ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(0, h * 0.1); ctx.lineTo(w, h * 0.1); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#ff6b6b88'; ctx.font = '9px monospace'; ctx.fillText('90% threshold', 4, h * 0.1 - 3);
-  
-  if (chartData.length < 2) return;
-  const s = getScenario();
-  const total = s.tokens.length;
-  
-  ctx.beginPath(); ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2;
-  chartData.forEach((v, i) => {
-    const x = (i / total) * w, y2 = h - v * h;
-    i === 0 ? ctx.moveTo(x, y2) : ctx.lineTo(x, y2);
-  });
-  ctx.stroke();
-  
-  // Convergence marker
-  const ci = Math.floor(s.convergencePoint * total);
-  if (chartData.length > ci) {
-    const cx = (ci / total) * w;
-    ctx.strokeStyle = '#00ff8866'; ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#00ff88'; ctx.fillText('early exit', cx + 3, h - 5);
-  }
+function updateSpeed() {
+  speed = parseInt(document.getElementById('speed').value);
+  document.getElementById('speed-label').textContent = 'Speed: ' + speed + 'x';
+  if (playing) { clearInterval(timer); timer = setInterval(tick, 400 / speed); }
 }
 
-document.getElementById('scenario').addEventListener('change', resetDemo);
-resetDemo();
+loadScenario(0);
 </script>
 </body>
 </html>
